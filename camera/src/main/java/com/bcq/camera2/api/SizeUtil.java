@@ -1,7 +1,9 @@
-package com.bcq.camera2;
+package com.bcq.camera2.api;
 
 import android.util.Log;
 import android.util.Size;
+
+import com.bcq.camera2.api.CompareSizesByArea;
 
 import java.util.ArrayList;
 import java.util.Collections;

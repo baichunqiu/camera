@@ -1,4 +1,4 @@
-package com.bcq.camera2;
+package com.bcq.camera2.api;
 
 import android.util.Size;
 

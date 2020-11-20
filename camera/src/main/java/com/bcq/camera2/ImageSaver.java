@@ -11,13 +11,14 @@ import java.nio.ByteBuffer;
 public class ImageSaver implements Runnable {
     private Image mImage;
     private String imagePath;
+    private Callback callback;
 
-    public ImageSaver() {
+    private ImageSaver(Callback callback) {
+        this.callback = callback;
     }
 
-    public ImageSaver(Image image, String imagePath) {
-        this.imagePath = imagePath;
-        this.mImage = image;
+    public static ImageSaver get(Callback callback) {
+        return new ImageSaver(callback);
     }
 
     public void setImage(Image image) {
@@ -68,7 +69,12 @@ public class ImageSaver implements Runnable {
                     e.printStackTrace();
                 }
             }
+            if (null != callback) callback.onComplete(imagePath);
+            clear();
         }
     }
 
+    public interface Callback {
+        void onComplete(String path);
+    }
 }

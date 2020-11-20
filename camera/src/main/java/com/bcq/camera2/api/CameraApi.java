@@ -1,4 +1,4 @@
-package com.bcq.camera2;
+package com.bcq.camera2.api;
 
 import android.content.Context;
 import android.content.res.Configuration;
@@ -28,6 +28,11 @@ import android.view.TextureView;
 import android.view.WindowManager;
 
 import androidx.annotation.NonNull;
+
+import com.bcq.camera2.AutoFitTextureView;
+import com.bcq.camera2.CameraListeren;
+import com.bcq.camera2.ICamera;
+import com.bcq.camera2.VideoParam;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -401,13 +406,13 @@ public abstract class CameraApi implements ICamera {
             mMediaRecorder.prepare();
         } catch (IOException e) {
             if (null != mCameraListeren)
-                mCameraListeren.onCameraError(-1, "MediaRecorder Record Prepare Error.");
+                mCameraListeren.onRecordError(-1, "MediaRecorder Record Prepare Error.");
         }
         mMediaRecorder.setOnErrorListener(new MediaRecorder.OnErrorListener() {
             @Override
             public void onError(MediaRecorder mediaRecorder, int i, int i1) {
                 if (null != mCameraListeren)
-                    mCameraListeren.onCameraError(-1, "MediaRecorder Record Error.");
+                    mCameraListeren.onRecordError(-1, "MediaRecorder Record Error.");
             }
         });
     }
@@ -445,7 +450,7 @@ public abstract class CameraApi implements ICamera {
             }
         } catch (CameraAccessException e) {
             e.printStackTrace();
-            if (null != mCameraListeren) mCameraListeren.onRecordError(-1, e.toString());
+            if (null != mCameraListeren) mCameraListeren.onCameraError(-1, e.toString());
         }
         return surfaces;
 
@@ -496,12 +501,12 @@ public abstract class CameraApi implements ICamera {
                 @Override
                 public void onConfigureFailed(@NonNull CameraCaptureSession cameraCaptureSession) {
                     if (null != mCameraListeren)
-                        mCameraListeren.onRecordError(-1, "CameraDevice Configure Failed ,");
+                        mCameraListeren.onCameraError(-1, "CameraDevice Configure Failed ,");
                 }
             }, mBgHandler);
         } catch (CameraAccessException e) {
             e.printStackTrace();
-            if (null != mCameraListeren) mCameraListeren.onRecordError(-1, e.toString());
+            if (null != mCameraListeren) mCameraListeren.onCameraError(-1, e.toString());
         }
     }
 
@@ -601,7 +606,7 @@ public abstract class CameraApi implements ICamera {
         this.onImageListeren = onImageListeren;
     }
 
-    protected interface OnImageListeren {
+    public interface OnImageListeren {
         void onImage(Image image);
     }
 }

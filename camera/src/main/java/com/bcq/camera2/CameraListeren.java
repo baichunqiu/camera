@@ -26,7 +26,7 @@ public interface CameraListeren {
     /**
      * 录制结束回调
      */
-    void onRecordComplete();
+    void onRecordComplete(String path);
 
     /**
      * 开始拍照回调
@@ -36,5 +36,5 @@ public interface CameraListeren {
     /**
      * 拍照完成回调
      */
-    void onTakeComplete(Image image);
+    void onTakeComplete(String image);
 }

@@ -79,7 +79,7 @@ public class FlashActivity extends AppCompatActivity {
                     VideoParam param = new VideoParam();
                     param.fps = 30;
                     param.bitRate = 10 * 1280 * 720;
-                    param.filePath = getFilePath()+".mp4";
+                    param.filePath = getFilePath() + ".mp4";
                     camera.startRecord(param);
                     capture_button.setSelected(true);
                 } else {
@@ -110,8 +110,18 @@ public class FlashActivity extends AppCompatActivity {
             }
 
             @Override
-            public void onRecordComplete() {
-                Log.e(TAG, "onRecordComplete");
+            public void onRecordComplete(String videoPath) {
+                Log.e(TAG, "onRecordComplete:videoPath = " + videoPath);
+            }
+
+            @Override
+            public void onTakePicture() {
+                Log.e(TAG, "onTakePicture");
+            }
+
+            @Override
+            public void onTakeComplete(String image) {
+                Log.e(TAG, "onTakeComplete:image = " + image);
             }
         });
     }

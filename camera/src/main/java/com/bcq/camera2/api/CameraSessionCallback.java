@@ -1,4 +1,4 @@
-package com.bcq.camera2;
+package com.bcq.camera2.api;
 
 import android.hardware.camera2.CameraCaptureSession;
 import android.hardware.camera2.CaptureRequest;
@@ -6,6 +6,8 @@ import android.hardware.camera2.CaptureResult;
 import android.hardware.camera2.TotalCaptureResult;
 
 import androidx.annotation.NonNull;
+
+import com.bcq.camera2.ICamera;
 
 /**
  * 拍照时session状态监听

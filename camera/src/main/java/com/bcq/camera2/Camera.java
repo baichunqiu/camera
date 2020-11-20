@@ -3,15 +3,23 @@ package com.bcq.camera2;
 import android.content.Context;
 import android.media.Image;
 
+import com.bcq.camera2.api.CameraApi;
+
 public class Camera extends CameraApi implements CameraApi.OnImageListeren {
     protected final static String TAG = "Camera";
     private ImageSaver imageTask;
+    private String videoPath;
 
     @Override
     public void init(Context activity, AutoFitTextureView textureView) {
         super.init(activity, textureView);
         setOnImageListeren(this);
-        imageTask = new ImageSaver();
+        imageTask = ImageSaver.get(new ImageSaver.Callback() {
+            @Override
+            public void onComplete(String path) {
+                if (null != mCameraListeren) mCameraListeren.onTakeComplete(path);
+            }
+        });
     }
 
     @Override
@@ -54,6 +62,12 @@ public class Camera extends CameraApi implements CameraApi.OnImageListeren {
 
     @Override
     public void startRecord(VideoParam param) {
+        if (null == param || !param.available()) {
+            if (null != mCameraListeren)
+                mCameraListeren.onRecordError(-1, "VideoParam Not Available.");
+            return;
+        }
+        videoPath = param.filePath;
         setUpMediaRecorder(param);
         buildCaptureSession(PreType.video, new OnSessionListeren() {
             @Override
@@ -71,7 +85,8 @@ public class Camera extends CameraApi implements CameraApi.OnImageListeren {
         mMediaRecorder.stop();
         mMediaRecorder.reset();
         startPreview();
-        if (null != mCameraListeren) mCameraListeren.onRecordComplete();
+        if (null != mCameraListeren) mCameraListeren.onRecordComplete(videoPath);
+        videoPath = "";
     }
 
     @Override
@@ -82,6 +97,7 @@ public class Camera extends CameraApi implements CameraApi.OnImageListeren {
             @Override
             public void onSession() {
                 if (null != mPreviewSession) {
+                    if (null != mCameraListeren) mCameraListeren.onTakePicture();
                     lockFocus();
                 }
             }

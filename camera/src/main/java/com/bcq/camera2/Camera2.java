@@ -113,15 +113,20 @@ public class Camera2 implements ICamera {
     private WeakReference<Activity> actReference;
 
     @Override
+    public void init(Context context, AutoFitTextureView textureView) {
+
+    }
+
+    //    @Override
     public void init(Activity activity, AutoFitTextureView textureView) {
         this.actReference = new WeakReference<>(activity);
         this.mTextureView = textureView;
     }
 
-    private ICameraListeren cameraListeren;
+    private CameraListeren cameraListeren;
 
     @Override
-    public void setCameraListeren(ICameraListeren mCameraListeren) {
+    public void setCameraListeren(CameraListeren mCameraListeren) {
         this.cameraListeren = mCameraListeren;
     }
 
@@ -191,6 +196,11 @@ public class Camera2 implements ICamera {
             size = new Size(1280, 720);
         }
         openCamera(size.getWidth(), size.getHeight());
+    }
+
+    @Override
+    public void switchCamera() {
+
     }
 
     private CameraManager manager;
@@ -298,13 +308,13 @@ public class Camera2 implements ICamera {
         }
     }
 
-    private File mFile;
+    private String imagePath;
     private final ImageReader.OnImageAvailableListener mOnImageAvailableListener
             = new ImageReader.OnImageAvailableListener() {
 
         @Override
         public void onImageAvailable(ImageReader reader) {
-            mBackgroundHandler.post(new ImageSaver(reader.acquireNextImage(), mFile));
+            mBackgroundHandler.post(new ImageSaver(reader.acquireNextImage(), imagePath));
         }
 
     };
@@ -737,7 +747,7 @@ public class Camera2 implements ICamera {
 
     @Override
     public void takePicture(String path) {
-        this.mFile = new File(path);
+        this.imagePath = path;
         if (null == mTextureView || !mTextureView.isAvailable()) {
             return;
         }

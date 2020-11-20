@@ -30,9 +30,6 @@ import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.core.app.ActivityCompat;
 
-import com.bcq.camera2.ui.Camera2BasicFragment;
-
-import java.io.File;
 import java.io.IOException;
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
@@ -111,15 +108,25 @@ public class Camera2_ implements ICamera {
     private WeakReference<Activity> actReference;
 
     @Override
+    public void init(Context context, AutoFitTextureView textureView) {
+
+    }
+
+    @Override
+    public void switchCamera() {
+
+    }
+
+    //    @Override
     public void init(Activity activity, AutoFitTextureView textureView) {
         this.actReference = new WeakReference<>(activity);
         this.mTextureView = textureView;
     }
 
-    private ICameraListeren cameraListeren;
+    private CameraListeren cameraListeren;
 
     @Override
-    public void setmCameraListeren(ICameraListeren mCameraListeren) {
+    public void setCameraListeren(CameraListeren mCameraListeren) {
         this.cameraListeren = mCameraListeren;
     }
 
@@ -281,7 +288,7 @@ public class Camera2_ implements ICamera {
             // For still image captures, we use the largest available size.
             Size largest = Collections.max(
                     Arrays.asList(map.getOutputSizes(ImageFormat.JPEG)),
-                    new Camera2BasicFragment.CompareSizesByArea());
+                    new CompareSizesByArea());
             mImageReader = ImageReader.newInstance(largest.getWidth(), largest.getHeight(),
                     ImageFormat.JPEG, 2);
             mImageReader.setOnImageAvailableListener(
@@ -299,13 +306,13 @@ public class Camera2_ implements ICamera {
         }
     }
 
-    private File mFile;
+    private String mImagePath;
     private final ImageReader.OnImageAvailableListener mOnImageAvailableListener
             = new ImageReader.OnImageAvailableListener() {
 
         @Override
         public void onImageAvailable(ImageReader reader) {
-            mBackgroundHandler.post(new ImageSaver(reader.acquireNextImage(), mFile));
+            mBackgroundHandler.post(new ImageSaver(reader.acquireNextImage(), mImagePath));
         }
 
     };

@@ -97,9 +97,13 @@ public abstract class CameraApi implements ICamera {
     private Context context;
     private WindowManager windowManager;
     private String[] cameraIds;
-    private CameraType cameraType = CameraType.front;
-//    private CameraCaptureSession.CaptureCallback mCaptureCallback = new CameraSessionCallback(this);
+    private CameraType cameraType = CameraType.background;
+    private CameraCaptureSession.CaptureCallback mCaptureCallback = new CameraSessionCallback(this);
     private OnImageListeren onImageListeren;
+
+    public boolean isFront() {
+        return CameraType.front == cameraType;
+    }
 
     @Override
     public void init(Context context, AutoFitTextureView textureView) {
@@ -257,6 +261,9 @@ public abstract class CameraApi implements ICamera {
         }
     }
 
+    private boolean mFlashSupported;
+    private boolean mAutoForcusSupported = true;
+
     /**
      * Sets up member variables related to camera.
      */
@@ -265,6 +272,21 @@ public abstract class CameraApi implements ICamera {
         try {
             // Choose the sizes for camera preview and video recording
             CameraCharacteristics characteristics = mCameraManager.getCameraCharacteristics(cameraId);
+            int[] afAvailableModes = characteristics.get(CameraCharacteristics.CONTROL_AF_AVAILABLE_MODES);
+            if (null != afAvailableModes) {
+                mAutoForcusSupported = false;
+                for (int i : afAvailableModes) {
+                    if (i != CameraMetadata.CONTROL_AF_MODE_OFF) {
+                        mAutoForcusSupported = true;
+                        break;
+                    }
+                }
+            }
+            Log.e(TAG, "mAutoForcusSupported = " + mAutoForcusSupported);
+            // Check if the flash is supported.
+            Boolean available = characteristics.get(CameraCharacteristics.FLASH_INFO_AVAILABLE);
+            mFlashSupported = available == null ? false : available;
+            Log.e(TAG, "mFlashSupported = " + mFlashSupported);
             StreamConfigurationMap map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
             mSensorOrientation = characteristics.get(CameraCharacteristics.SENSOR_ORIENTATION);
             if (map == null) {
@@ -273,9 +295,7 @@ public abstract class CameraApi implements ICamera {
             mVideoSize = SizeUtil.chooseVideoSize(map.getOutputSizes(MediaRecorder.class));
 //            mPreviewSize = SizeUtil.chooseOptimalSize(map.getOutputSizes(SurfaceTexture.class),
 //                    textureViewSize.getWidth(), textureViewSize.getHeight(), mVideoSize);
-            mPreviewSize = new Size(1920,1080);
-            Log.e(TAG, "mVideoSize:width = " + mVideoSize.getWidth() + " height = " + mVideoSize.getHeight());
-            Log.e(TAG, "mPreviewSize:width = " + mPreviewSize.getWidth() + " height = " + mPreviewSize.getHeight());
+            mPreviewSize = new Size(1920, 1080);
             //预览
             int orientation = context.getResources().getConfiguration().orientation;
             if (orientation == Configuration.ORIENTATION_LANDSCAPE) {
@@ -288,16 +308,16 @@ public abstract class CameraApi implements ICamera {
             mMediaRecorder = new MediaRecorder();
             //image
             // For still image captures, we use the largest available size.
-//            Size largest = Collections.max(
-//                    Arrays.asList(map.getOutputSizes(ImageFormat.JPEG)),
-//                    new CompareSizesByArea());
-            mImageReader = ImageReader.newInstance(mPreviewSize.getWidth(), mPreviewSize.getHeight(),
+            Size largest = Collections.max(
+                    Arrays.asList(map.getOutputSizes(ImageFormat.JPEG)),
+                    new CompareSizesByArea());
+            mImageReader = ImageReader.newInstance(largest.getWidth(), largest.getHeight(),
                     ImageFormat.JPEG, 2);
             mImageReader.setOnImageAvailableListener(
                     new ImageReader.OnImageAvailableListener() {
                         @Override
                         public void onImageAvailable(ImageReader reader) {
-                            Log.e(TAG,"onImageAvailable");
+                            Log.e(TAG, "onImageAvailable");
                             if (null != onImageListeren) {
                                 onImageListeren.onImage(reader.acquireNextImage());
                             }
@@ -387,45 +407,46 @@ public abstract class CameraApi implements ICamera {
         mTextureView.setTransform(matrix);
     }
 
-    protected void setUpMediaRecorder(VideoParam param) {
-        mMediaRecorder.setAudioSource(MediaRecorder.AudioSource.MIC);
-        mMediaRecorder.setVideoSource(MediaRecorder.VideoSource.SURFACE);
-        mMediaRecorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
-        mMediaRecorder.setOutputFile(param.filePath);
-        mMediaRecorder.setVideoEncodingBitRate(param.bitRate);
-        mMediaRecorder.setVideoFrameRate(param.fps);
-        mMediaRecorder.setVideoSize(mVideoSize.getWidth(), mVideoSize.getHeight());
-        mMediaRecorder.setVideoEncoder(MediaRecorder.VideoEncoder.H264);
-        mMediaRecorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC);
-        int rotation = windowManager.getDefaultDisplay().getRotation();
-        switch (mSensorOrientation) {
-            case SENSOR_ORIENTATION_DEFAULT_DEGREES:
-                mMediaRecorder.setOrientationHint(DEFAULT_ORIENTATIONS.get(rotation));
-                break;
-            case SENSOR_ORIENTATION_INVERSE_DEGREES:
-                mMediaRecorder.setOrientationHint(INVERSE_ORIENTATIONS.get(rotation));
-                break;
-        }
+    protected boolean setUpMediaRecorder(VideoParam param) {
         try {
+            mMediaRecorder.setAudioSource(MediaRecorder.AudioSource.MIC);
+            mMediaRecorder.setVideoSource(MediaRecorder.VideoSource.SURFACE);
+            mMediaRecorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
+            mMediaRecorder.setOutputFile(param.getFilePath());
+            mMediaRecorder.setVideoEncodingBitRate(param.bitRate);
+            mMediaRecorder.setVideoFrameRate(param.fps);
+            mMediaRecorder.setVideoSize(mVideoSize.getWidth(), mVideoSize.getHeight());
+            mMediaRecorder.setVideoEncoder(MediaRecorder.VideoEncoder.H264);
+            mMediaRecorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC);
+            int rotation = windowManager.getDefaultDisplay().getRotation();
+            switch (mSensorOrientation) {
+                case SENSOR_ORIENTATION_DEFAULT_DEGREES:
+                    mMediaRecorder.setOrientationHint(DEFAULT_ORIENTATIONS.get(rotation));
+                    break;
+                case SENSOR_ORIENTATION_INVERSE_DEGREES:
+                    mMediaRecorder.setOrientationHint(INVERSE_ORIENTATIONS.get(rotation));
+                    break;
+            }
             mMediaRecorder.prepare();
-        } catch (IOException e) {
+            mMediaRecorder.setOnErrorListener(new MediaRecorder.OnErrorListener() {
+                @Override
+                public void onError(MediaRecorder mediaRecorder, int i, int i1) {
+                    if (null != mCameraListeren)
+                        mCameraListeren.onRecordError(-1, "MediaRecorder Record Error.");
+                }
+            });
+            return true;
+        } catch (IOException | IllegalStateException e) {
             if (null != mCameraListeren)
                 mCameraListeren.onRecordError(-1, "MediaRecorder Record Prepare Error.");
         }
-        mMediaRecorder.setOnErrorListener(new MediaRecorder.OnErrorListener() {
-            @Override
-            public void onError(MediaRecorder mediaRecorder, int i, int i1) {
-                if (null != mCameraListeren)
-                    mCameraListeren.onRecordError(-1, "MediaRecorder Record Error.");
-            }
-        });
+        return false;
     }
 
     private List<Surface> buildPreSurface(PreType preType) {
         if (null == mCameraDevice || !mTextureView.isAvailable() || null == mPreviewSize) {
             return null;
         }
-        Log.e(TAG, "mPreviewSize W:" + mPreviewSize.getWidth() + " H:" + mPreviewSize.getHeight());
         SurfaceTexture texture = mTextureView.getSurfaceTexture();
         if (null == texture) return null;
         List<Surface> surfaces = new ArrayList<>();
@@ -487,7 +508,7 @@ public abstract class CameraApi implements ICamera {
             closePreviewSession();
             List<Surface> surfaces = buildPreSurface(preType);
             int size = null == surfaces ? 0 : surfaces.size();
-            Log.e(TAG, "size = " + size + " preType = " + preType);
+//            Log.e(TAG, "size = " + size + " preType = " + preType);
             boolean buildOk = PreType.previdew == preType ? (1 == size) : (2 == size);
             if (!buildOk) {
                 Log.e(TAG, "Build Preview Surface Fail.");
@@ -517,89 +538,28 @@ public abstract class CameraApi implements ICamera {
     }
 
     protected void lockFocus() {
-        Log.e(TAG, "lockFocus");
-        try {
-            mPreviewBuilder.set(CaptureRequest.CONTROL_AF_TRIGGER, CameraMetadata.CONTROL_AF_TRIGGER_START);
-            mState = STATE_WAITING_LOCK;
-            mPreviewSession.capture(mPreviewBuilder.build(), mCaptureCallback, mBgHandler);
-        } catch (CameraAccessException e) {
-            e.printStackTrace();
+        if (!mAutoForcusSupported) {
+            //不支持自定对焦直接走picture
+            captureStillPicture();
+        } else {
+            try {
+                mPreviewBuilder.set(CaptureRequest.CONTROL_AF_TRIGGER, CameraMetadata.CONTROL_AF_TRIGGER_START);
+                mState = STATE_WAITING_LOCK;
+                mPreviewSession.capture(mPreviewBuilder.build(), mCaptureCallback, mBgHandler);
+            } catch (CameraAccessException e) {
+                e.printStackTrace();
+            }
         }
     }
 
     protected void setAutoFlash(CaptureRequest.Builder requestBuilder) {
-        requestBuilder.set(CaptureRequest.CONTROL_AE_MODE,
+        if (mFlashSupported) requestBuilder.set(CaptureRequest.CONTROL_AE_MODE,
                 CaptureRequest.CONTROL_AE_MODE_ON_AUTO_FLASH);
     }
 
     /******************************************************************
      *  以下 拍照状态CaptureCallback中执行的方法 可以忽略
      *******************************************************************/
-
-    private CameraCaptureSession.CaptureCallback mCaptureCallback
-            = new CameraCaptureSession.CaptureCallback() {
-
-        private void process(CaptureResult result) {
-            switch (mState) {
-                case STATE_PREVIEW: {
-                    // We have nothing to do when the camera preview is working normally.
-                    break;
-                }
-                case STATE_WAITING_LOCK: {
-                    Integer afState = result.get(CaptureResult.CONTROL_AF_STATE);
-                    if (afState == null) {
-                        captureStillPicture();
-                    } else if (CaptureResult.CONTROL_AF_STATE_FOCUSED_LOCKED == afState ||
-                            CaptureResult.CONTROL_AF_STATE_NOT_FOCUSED_LOCKED == afState) {
-                        // CONTROL_AE_STATE can be null on some devices
-                        Integer aeState = result.get(CaptureResult.CONTROL_AE_STATE);
-                        if (aeState == null ||
-                                aeState == CaptureResult.CONTROL_AE_STATE_CONVERGED) {
-                            mState = STATE_PICTURE_TAKEN;
-                            captureStillPicture();
-                        } else {
-                            runPrecaptureSequence();
-                        }
-                    }
-                    break;
-                }
-                case STATE_WAITING_PRECAPTURE: {
-                    // CONTROL_AE_STATE can be null on some devices
-                    Integer aeState = result.get(CaptureResult.CONTROL_AE_STATE);
-                    if (aeState == null ||
-                            aeState == CaptureResult.CONTROL_AE_STATE_PRECAPTURE ||
-                            aeState == CaptureRequest.CONTROL_AE_STATE_FLASH_REQUIRED) {
-                        mState = STATE_WAITING_NON_PRECAPTURE;
-                    }
-                    break;
-                }
-                case STATE_WAITING_NON_PRECAPTURE: {
-                    // CONTROL_AE_STATE can be null on some devices
-                    Integer aeState = result.get(CaptureResult.CONTROL_AE_STATE);
-                    if (aeState == null || aeState != CaptureResult.CONTROL_AE_STATE_PRECAPTURE) {
-                        mState = STATE_PICTURE_TAKEN;
-                        captureStillPicture();
-                    }
-                    break;
-                }
-            }
-        }
-
-        @Override
-        public void onCaptureProgressed(@NonNull CameraCaptureSession session,
-                                        @NonNull CaptureRequest request,
-                                        @NonNull CaptureResult partialResult) {
-            process(partialResult);
-        }
-
-        @Override
-        public void onCaptureCompleted(@NonNull CameraCaptureSession session,
-                                       @NonNull CaptureRequest request,
-                                       @NonNull TotalCaptureResult result) {
-            process(result);
-        }
-
-    };
 
     protected void unlockFocus() {
         try {

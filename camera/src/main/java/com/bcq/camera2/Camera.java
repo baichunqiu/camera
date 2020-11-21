@@ -5,11 +5,29 @@ import android.media.Image;
 import android.util.Log;
 
 import com.bcq.camera2.api.CameraApi;
+import com.bcq.camera2.api.VideoJoinHelper;
 
+import java.io.File;
+import java.io.IOException;
+import java.util.List;
+import java.util.logging.Handler;
+
+/**
+ * Camera2 + MediaRecord 封装对象
+ * 1.拍照（后置摄像头和前置摄像头）
+ * - 1）正常拍照流程，先对焦 在拍照
+ * - 2）由于前置摄像头可能不支持自动对焦，lockFocus的实现时判断，如果不支持对焦（前置摄像头）直接拍照。
+ * 2.录制视频
+ * - 1）暂停和恢复：由于MediaRecord Api对pause和resume的api没有实现。因此暂停执行的是stop() 恢复执行的是start()
+ * - 2)录制结束后 对因暂停引起的产生多个子文件进行统一合并。
+ * 3.录制中-实现拍照
+ * - 1）录制过程中 正常执行拍照，录制不暂停 拍照结束后恢复录制的预览（拍照对焦过程中 视频会有不到1s的卡顿）。¬
+ */
 public class Camera extends CameraApi implements CameraApi.OnImageListeren {
     protected final static String TAG = "Camera";
     private ImageSaver imageTask;
     private VideoParam videoParam;
+    private boolean mIsRecording = false;
 
     @Override
     public void init(Context activity, AutoFitTextureView textureView) {
@@ -54,29 +72,43 @@ public class Camera extends CameraApi implements CameraApi.OnImageListeren {
 
     @Override
     public void startPreview() {
-        buildCaptureSession(PreType.previdew, new OnSessionListeren() {
-            @Override
-            public void onSession() {// TODO: 11/20/20 no need to nothing
-            }
-        });
+        buildCaptureSession(PreType.previdew, null);
     }
 
     @Override
     public void startRecord(VideoParam param) {
-        Log.e(TAG, "startRecord");
+        if (mIsRecording) {
+            Log.e(TAG, "未结束");
+            return;
+        }
         if (null == param || !param.available()) {
             if (null != mCameraListeren)
                 mCameraListeren.onRecordError(-1, "VideoParam Not Available.");
             return;
         }
+        mIsRecording = false;
         videoParam = param;
-        setUpMediaRecorder(param);
+        videoParam.addResumePath();
+        if (!setUpMediaRecorder(param)) {
+            return;
+        }
         buildCaptureSession(PreType.video, new OnSessionListeren() {
             @Override
             public void onSession() {
                 if (null != mPreviewSession) {
                     if (null != mCameraListeren) mCameraListeren.onPreRecord();
-                    mMediaRecorder.start();
+                    Log.e(TAG, "start");
+                    try {
+                        mMediaRecorder.start();
+                        mBgHandler.postDelayed(new Runnable() {
+                            @Override
+                            public void run() {
+                                mIsRecording = true;
+                            }
+                        }, 300);
+                    } catch (IllegalStateException e) {
+                        e.printStackTrace();
+                    }
                 }
             }
         });
@@ -84,45 +116,41 @@ public class Camera extends CameraApi implements CameraApi.OnImageListeren {
 
     @Override
     public void pauseRecord() {
-        Log.e(TAG, "pauseRecord");
-        try {
-            mMediaRecorder.stop();
-            startPreview();
-            if (null != mCameraListeren) mCameraListeren.onPauseRecord();
-        } catch (IllegalStateException e) {
-            e.printStackTrace();
-            if (null != mCameraListeren)
-                mCameraListeren.onRecordError(-1, "Media Record Pause Fail.");
-        }
-
+        stopRecord(true);
     }
 
     @Override
     public void resumeRecord() {
-        Log.e(TAG, "resumeRecord");
-        setUpMediaRecorder(videoParam);
-        buildCaptureSession(PreType.video, new OnSessionListeren() {
-            @Override
-            public void onSession() {
-                if (null != mPreviewSession) {
-                    if (null != mCameraListeren) mCameraListeren.onResumeRecord();
-                    mMediaRecorder.start();
-                } else {
-                    mCameraListeren.onRecordError(-1, "Media Record Resume Fail.");
-                }
-            }
-        });
+        startRecord(videoParam);
     }
 
     @Override
     public void stopRecord() {
-        Log.e(TAG, "stopRecord");
-        mMediaRecorder.stop();
+        stopRecord(false);
+    }
+
+    private void stopRecord(boolean pause) {
+        if (!mIsRecording) {
+            Log.e(TAG, "未开始");
+            return;
+        }
+        try {
+            mMediaRecorder.stop();
+        } catch (IllegalStateException e) {
+            e.printStackTrace();
+            if (null != mCameraListeren) {
+                mCameraListeren.onRecordError(-1, "Media Record " + (pause ? "Pause" : "Stop") + " Fail.");
+            }
+        }
         mMediaRecorder.reset();
         startPreview();
-        if (null != mCameraListeren) mCameraListeren.onRecordComplete(videoParam.filePath);
-        videoParam = null;
+        if (!pause) {
+            mergeVideo(videoParam.getPaths());
+            videoParam = null;
+        }
+        mIsRecording = false;
     }
+
 
     @Override
     public void takePicture(String path) {
@@ -146,5 +174,40 @@ public class Camera extends CameraApi implements CameraApi.OnImageListeren {
         if (imageTask.available()) {
             mBgHandler.post(imageTask);
         }
+        //保存图片后
+        if (mIsRecording) {
+            buildCaptureSession(PreType.video, null);
+        }
+    }
+
+    /**
+     * 合并视频
+     * index = 0：目标路径
+     * other：待合并的子路径
+     *
+     * @param filePaths
+     */
+    private void mergeVideo(List<String> filePaths) {
+        int size = null == filePaths ? 0 : filePaths.size();
+        if (size < 2) return;
+        String desPath = filePaths.get(0);
+        if (2 == size) {//只有一个文件 重命名即可
+            File chidFile = new File(filePaths.get(1));
+            chidFile.renameTo(new File(desPath));
+            if (null != mCameraListeren) mCameraListeren.onRecordComplete(desPath);
+            return;
+        }
+        List<String> chidFilePaths = filePaths.subList(1, size);
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    VideoJoinHelper.mergeVideos(chidFilePaths, desPath);
+                    if (null != mCameraListeren) mCameraListeren.onRecordComplete(desPath);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+        }).start();
     }
 }

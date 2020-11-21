@@ -8,6 +8,7 @@ public interface ICamera {
     SparseIntArray DEFAULT_ORIENTATIONS = new SparseIntArray();
     SparseIntArray INVERSE_ORIENTATIONS = new SparseIntArray();
     SparseIntArray ORIENTATIONS = new SparseIntArray();
+
     enum PreType {
         picture,//拍照预览
         video,//录制视频预览
@@ -40,7 +41,6 @@ public interface ICamera {
     int STATE_WAITING_LOCK = 1;
     //Camera state: Waiting for the exposure to be precapture state.
     int STATE_WAITING_PRECAPTURE = 2;
-
     //Camera state: Waiting for the exposure state to be something other than precapture.
     int STATE_WAITING_NON_PRECAPTURE = 3;
     //Camera state: Picture was taken.
@@ -63,6 +63,10 @@ public interface ICamera {
     void switchCamera();
 
     void startRecord(VideoParam param);
+
+    void pauseRecord();
+
+    void resumeRecord();
 
     void stopRecord();
 

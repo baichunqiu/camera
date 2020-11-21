@@ -13,6 +13,7 @@ import android.hardware.camera2.CameraDevice;
 import android.hardware.camera2.CameraManager;
 import android.hardware.camera2.CameraMetadata;
 import android.hardware.camera2.CaptureRequest;
+import android.hardware.camera2.CaptureResult;
 import android.hardware.camera2.TotalCaptureResult;
 import android.hardware.camera2.params.StreamConfigurationMap;
 import android.media.Image;
@@ -97,7 +98,7 @@ public abstract class CameraApi implements ICamera {
     private WindowManager windowManager;
     private String[] cameraIds;
     private CameraType cameraType = CameraType.front;
-    private CameraCaptureSession.CaptureCallback mCaptureCallback = new CameraSessionCallback(this);
+//    private CameraCaptureSession.CaptureCallback mCaptureCallback = new CameraSessionCallback(this);
     private OnImageListeren onImageListeren;
 
     @Override
@@ -185,6 +186,7 @@ public abstract class CameraApi implements ICamera {
         } else {
             cameraType = CameraType.background;
         }
+        closeCamera();
         openCamera();
     }
 
@@ -269,8 +271,9 @@ public abstract class CameraApi implements ICamera {
                 throw new RuntimeException("Cannot get available preview/video sizes");
             }
             mVideoSize = SizeUtil.chooseVideoSize(map.getOutputSizes(MediaRecorder.class));
-            mPreviewSize = SizeUtil.chooseOptimalSize(map.getOutputSizes(SurfaceTexture.class),
-                    textureViewSize.getWidth(), textureViewSize.getHeight(), mVideoSize);
+//            mPreviewSize = SizeUtil.chooseOptimalSize(map.getOutputSizes(SurfaceTexture.class),
+//                    textureViewSize.getWidth(), textureViewSize.getHeight(), mVideoSize);
+            mPreviewSize = new Size(1920,1080);
             Log.e(TAG, "mVideoSize:width = " + mVideoSize.getWidth() + " height = " + mVideoSize.getHeight());
             Log.e(TAG, "mPreviewSize:width = " + mPreviewSize.getWidth() + " height = " + mPreviewSize.getHeight());
             //预览
@@ -285,15 +288,16 @@ public abstract class CameraApi implements ICamera {
             mMediaRecorder = new MediaRecorder();
             //image
             // For still image captures, we use the largest available size.
-            Size largest = Collections.max(
-                    Arrays.asList(map.getOutputSizes(ImageFormat.JPEG)),
-                    new CompareSizesByArea());
-            mImageReader = ImageReader.newInstance(largest.getWidth(), largest.getHeight(),
+//            Size largest = Collections.max(
+//                    Arrays.asList(map.getOutputSizes(ImageFormat.JPEG)),
+//                    new CompareSizesByArea());
+            mImageReader = ImageReader.newInstance(mPreviewSize.getWidth(), mPreviewSize.getHeight(),
                     ImageFormat.JPEG, 2);
             mImageReader.setOnImageAvailableListener(
                     new ImageReader.OnImageAvailableListener() {
                         @Override
                         public void onImageAvailable(ImageReader reader) {
+                            Log.e(TAG,"onImageAvailable");
                             if (null != onImageListeren) {
                                 onImageListeren.onImage(reader.acquireNextImage());
                             }
@@ -500,17 +504,20 @@ public abstract class CameraApi implements ICamera {
 
                 @Override
                 public void onConfigureFailed(@NonNull CameraCaptureSession cameraCaptureSession) {
+                    if (null != onSessionListeren) onSessionListeren.onSession();
                     if (null != mCameraListeren)
                         mCameraListeren.onCameraError(-1, "CameraDevice Configure Failed ,");
                 }
             }, mBgHandler);
         } catch (CameraAccessException e) {
             e.printStackTrace();
+            if (null != onSessionListeren) onSessionListeren.onSession();
             if (null != mCameraListeren) mCameraListeren.onCameraError(-1, e.toString());
         }
     }
 
     protected void lockFocus() {
+        Log.e(TAG, "lockFocus");
         try {
             mPreviewBuilder.set(CaptureRequest.CONTROL_AF_TRIGGER, CameraMetadata.CONTROL_AF_TRIGGER_START);
             mState = STATE_WAITING_LOCK;
@@ -528,6 +535,71 @@ public abstract class CameraApi implements ICamera {
     /******************************************************************
      *  以下 拍照状态CaptureCallback中执行的方法 可以忽略
      *******************************************************************/
+
+    private CameraCaptureSession.CaptureCallback mCaptureCallback
+            = new CameraCaptureSession.CaptureCallback() {
+
+        private void process(CaptureResult result) {
+            switch (mState) {
+                case STATE_PREVIEW: {
+                    // We have nothing to do when the camera preview is working normally.
+                    break;
+                }
+                case STATE_WAITING_LOCK: {
+                    Integer afState = result.get(CaptureResult.CONTROL_AF_STATE);
+                    if (afState == null) {
+                        captureStillPicture();
+                    } else if (CaptureResult.CONTROL_AF_STATE_FOCUSED_LOCKED == afState ||
+                            CaptureResult.CONTROL_AF_STATE_NOT_FOCUSED_LOCKED == afState) {
+                        // CONTROL_AE_STATE can be null on some devices
+                        Integer aeState = result.get(CaptureResult.CONTROL_AE_STATE);
+                        if (aeState == null ||
+                                aeState == CaptureResult.CONTROL_AE_STATE_CONVERGED) {
+                            mState = STATE_PICTURE_TAKEN;
+                            captureStillPicture();
+                        } else {
+                            runPrecaptureSequence();
+                        }
+                    }
+                    break;
+                }
+                case STATE_WAITING_PRECAPTURE: {
+                    // CONTROL_AE_STATE can be null on some devices
+                    Integer aeState = result.get(CaptureResult.CONTROL_AE_STATE);
+                    if (aeState == null ||
+                            aeState == CaptureResult.CONTROL_AE_STATE_PRECAPTURE ||
+                            aeState == CaptureRequest.CONTROL_AE_STATE_FLASH_REQUIRED) {
+                        mState = STATE_WAITING_NON_PRECAPTURE;
+                    }
+                    break;
+                }
+                case STATE_WAITING_NON_PRECAPTURE: {
+                    // CONTROL_AE_STATE can be null on some devices
+                    Integer aeState = result.get(CaptureResult.CONTROL_AE_STATE);
+                    if (aeState == null || aeState != CaptureResult.CONTROL_AE_STATE_PRECAPTURE) {
+                        mState = STATE_PICTURE_TAKEN;
+                        captureStillPicture();
+                    }
+                    break;
+                }
+            }
+        }
+
+        @Override
+        public void onCaptureProgressed(@NonNull CameraCaptureSession session,
+                                        @NonNull CaptureRequest request,
+                                        @NonNull CaptureResult partialResult) {
+            process(partialResult);
+        }
+
+        @Override
+        public void onCaptureCompleted(@NonNull CameraCaptureSession session,
+                                       @NonNull CaptureRequest request,
+                                       @NonNull TotalCaptureResult result) {
+            process(result);
+        }
+
+    };
 
     protected void unlockFocus() {
         try {

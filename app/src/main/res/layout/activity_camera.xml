@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
@@ -11,15 +10,32 @@
         android:layout_height="match_parent" />
 
     <ImageButton
-        android:id="@+id/capture_button"
-        android:layout_width="96dp"
-        android:layout_height="96dp"
-        android:layout_marginBottom="96dp"
-        android:scaleType="fitCenter"
-        android:background="@drawable/ic_shutter"
-        app:layout_constraintLeft_toLeftOf="parent"
-        app:layout_constraintRight_toRightOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent"
-        android:contentDescription="@string/capture" />
+        android:id="@+id/switch_button"
+        android:layout_width="20dp"
+        android:layout_height="20dp"
+        android:layout_alignParentRight="true"
+        android:layout_marginTop="15dp"
+        android:layout_marginRight="15dp"
+        android:background="@mipmap/ic_switch"
+        android:scaleType="fitCenter" />
 
-</androidx.constraintlayout.widget.ConstraintLayout>
+    <ImageButton
+        android:id="@+id/capture_button"
+        android:layout_width="75dp"
+        android:layout_height="75dp"
+        android:layout_alignParentBottom="true"
+        android:layout_centerHorizontal="true"
+        android:layout_marginBottom="60dp"
+        android:background="@drawable/ic_shutter"
+        android:scaleType="fitCenter" />
+
+    <ImageButton
+        android:id="@+id/type_button"
+        android:layout_width="35dp"
+        android:layout_height="35dp"
+        android:layout_alignParentBottom="true"
+        android:layout_marginLeft="25dp"
+        android:layout_marginBottom="80dp"
+        android:background="@mipmap/ic_camera"
+        android:scaleType="fitCenter" />
+</RelativeLayout>

@@ -16,6 +16,10 @@ public interface CameraListeren {
      */
     void onPreRecord();
 
+    void onPauseRecord();
+
+    void onResumeRecord();
+
     /**
      * 录制错误
      *
